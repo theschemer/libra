@@ -9,5 +9,7 @@
 ("private" . #f)
 ("scripts" 
     ("run" . "scheme --script"))
-("dependencies")
+("dependencies" 
+    ("irregex" . "0.9.6")
+    ("json" . "0.5.1"))
 ("devDependencies"))

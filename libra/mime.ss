@@ -1,4 +1,4 @@
-(library (web mime)
+(library (libra mime)
   (export get-mime-type)
   (import (scheme))
 
