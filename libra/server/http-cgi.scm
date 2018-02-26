@@ -139,11 +139,10 @@
 ;;and any additional @3 @dots{}; with @var{*http:byline*} or SLIB's
 ;;default at the bottom.
 (define (http:error-page status-code reason-phrase . html-strings)
-  (define byline
-    (or
-     *http:byline*
-      "Libra HTTP/1.0 server"
-			))
+  	(define byline
+		(or
+			*http:byline*
+			"Libra HTTP/1.0 Server"))
 	(string-append 
 		(http:status-line status-code reason-phrase)
 		(http:content
@@ -172,18 +171,19 @@
 ;;Otherwise, @0 replies (to @3) with appropriate HTML describing the
 ;;problem.
 (define (http:serve-query serve-proc client-socket)
-  (let* ([input-port (make-input-port (lambda x (void)) (socket:read client-socket))]
+  (let* ([input-port (make-input-port (lambda x (void)) (utf8->string (socket:read client-socket)))]
 		 [request-line (http:read-request-line input-port)]
 		 [header (and request-line (http:read-header input-port))]
 		 [query-string (and header (http:read-query-string
-						request-line header input-port))])
-	(socket:write client-socket (http:service serve-proc request-line query-string header))))
+						request-line header input-port))]
+		 [rst (http:service serve-proc request-line query-string header)])
+	(socket:write client-socket (if (bytevector? rst) rst (string->utf8 rst)))))
 
 
 (define (http:service serve-proc request-line query-string header)
   (cond 
 		((not request-line)
-				(http:error-page 400 "Bad Request."))
+			(http:error-page 400 "Bad Request."))
 		((string? (car request-line))
 			(http:error-page 501 "Not Implemented" (html:plain request-line)))
 		((not (memq (car request-line) '(get post)))
@@ -191,18 +191,20 @@
 		((serve-proc request-line query-string header) =>
 			(lambda (reply)
 				(cond 
+					((bytevector? reply)
+						reply)
 					((string? reply)
 						(string-append (http:status-line 200 "OK")
-								reply))
+							reply))
 					((and (pair? reply) (list? reply))
 						(if (number? (car reply))
 							(apply http:error-page reply)
 							(apply http:error-page (cons 500 reply))))
 					(else (http:error-page 500 "Internal Server Error")))))
-	((not query-string)
-	 	(http:error-page 400 "Bad Request" (html:plain request-line)))
-	(else
-	 	(http:error-page 500 "Internal Server Error" (html:plain header)))))
+		((not query-string)
+			(http:error-page 400 "Bad Request" (html:plain request-line)))
+		(else
+			(http:error-page 500 "Internal Server Error" (html:plain header)))))
 
 (define (http:read-start-line port)
   (do ((line (read-line port) (read-line port)))

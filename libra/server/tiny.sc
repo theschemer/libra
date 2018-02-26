@@ -17,6 +17,7 @@
         (let ([server (socket:socket AF_INET SOCK_STREAM IPPROTO_IP)])
           (socket:bind server AF_INET ip port)
           (socket:listen server)
+          (printf "Libra Listening on ~a:~a\n" ip port)
           (let loop ([client (socket:accept server)])
             (when (>= client 0)
               (if threads?
@@ -49,6 +50,6 @@
 ;     (string-append
 ;       (http:content
 ;       '(("Content-Type" . "text/html"))
-;       "<div>test</div>"))))
+;       "<div>hello</div>"))))
 
 ; (tiny:run serve-proc port ip)

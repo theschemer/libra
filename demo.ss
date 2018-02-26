@@ -1,7 +1,7 @@
 (import (libra libra))
 
 (get! "/"
-	 (lambda (p) (default-make-response "GET request")))
+	(lambda (p) (default-make-response "GET request")))
 
 (post! "/" 
 	(lambda (p) (default-make-response "POST request")))

@@ -2,8 +2,11 @@
     (export
         get!
         post!
-        default-make-response
         router!
+        default-make-response
+        default-make-json 
+        view
+        params-ref
         libra:run)
     (import
         (scheme)
@@ -11,12 +14,18 @@
             string-for-each string-fill! string-copy 
             string->list string-copy! string-titlecase 
             string-upcase string-downcase string-hash)
+        (libc libc)
         (irregex irregex)
         (json json)
-        (libc libc)
         (libra mime)
         (libra server http-cgi)
         (libra server tiny))
+
+    ;; 路由哈希表
+    (define router-handler (make-hashtable string-hash string=?))
+
+    ;; 配置字典
+    (define libra-options (make-hashtable string-hash string=?))
 
     ;; 定义http方法函数
     (define (get! url handler) (router! "get" url handler))
@@ -29,9 +38,6 @@
         (http:content
             '(("Content-Type" . "text/html") ("Connection" . "close"))
                 html))
-
-    ;; 路由哈希表
-    (define router-handler (make-hashtable string-hash string=?))
 
     ;; 定义路由函数
     (define (router! method url handler)
@@ -71,7 +77,7 @@
         (let loop ((index 0))
             (begin
                 (let [(reg-router (vector-ref router-vector index))]
-                    ;; (printf (format "~a\n" reg-router))
+                    ; (printf "~a\n" reg-router)
                     (if (string-index reg-router #\?)
                         (begin
                             (let ((values (libra-regex-router reg-router router)))
@@ -159,7 +165,7 @@
     ;; 返回视图函数
     (define view
         (lambda (file-name)
-            (if (eq? #f (string-index file-name #\.))
+            (unless (string-index file-name #\.)
                 (set! file-name (string-append 
                                     (hashtable-ref libra-options "web-path" (get-app-path))
                                     "/"
@@ -189,47 +195,40 @@
 
     ;; 返回资源文件
     (define (default-make-resource request)
-        0
-        ; (let ((file-path (get-file-path request)))
-        ;     (if (file-exists? file-path)
-        ;         (begin
-        ;             (display (string-append
-        ;                         (http:status-line 200 "OK")
-        ;                         (http:header
-        ;                             (list
-        ;                                 (get-content-type (substring request (+ 1 (string-index-right request #\.)) (string-length request)))
-        ;                                 (cons "Content-Length" (number->string (get-file-length file-path)))
-        ;                                 (cons "Connection" "close")
-        ;                             )
-        ;                         )
-        ;                     ) 
-        ;                 oport
-        ;             )
-        ;             (let ((f (c-fopen file-path "rb"))
-        ;                 (buf (cffi-alloc 1024)))
-        ;                 (let loop ((len (c-fread buf 1 1024 f)))
-        ;                     (if (> len 0)
-        ;                         (begin	   
-        ;                             (cwrite-all port buf len)
-        ;                             (loop (c-fread buf 1 1024 f)))
-        ;                         (c-fclose f)))
-        ;                 (cffi-free buf)
-        ;             )
-        ;             '()
-        ;         )
-        ;         '(404 "Bad Request")
-        ;     )
-        ; )
+        (let* ([file-path (get-file-path request)]
+               [exist? (file-exists? file-path)])
+            (if exist?
+                (let* ([flen (get-file-length file-path)]
+                       [line (string-append
+                                (http:status-line 200 "OK")
+                                (http:header
+                                    (list
+                                        (get-content-type (substring request (+ 1 (string-index-right request #\.)) (string-length request)))
+                                        (cons "Content-Length" (number->string flen))
+                                        (cons "Connection" "close"))))]
+                       [lbv (string->utf8 line)]
+                       [llen (bytevector-length lbv)]
+                       [fbuf (make-bytevector flen)]
+                       [f (c-fopen file-path "r")]
+                       [fr (c-fread fbuf flen 1 f)]
+                       [buf (make-bytevector (+ llen flen))])
+                    (bytevector-copy! lbv 0 buf 0 llen)
+                    (bytevector-copy! fbuf 0 buf llen flen)
+                    (c-fclose f)
+                    buf
+                ) 
+                '(404 "Bad Request")
+            )
+        )
     )
 
     ;; 获取文件长度
     (define (get-file-length file-path)
-        (define length 0)
-        (let ([p (open-input-file file-path)])
-            (set! length (file-length p))
+        (let* ([p (open-input-file file-path)]
+               [len (file-length p)])
             (close-port p)
+            len
         )
-        length
     )
 
     ;; 获取执行文件文件夹地址
@@ -244,21 +243,12 @@
         )
     )
 
-
-    ;; 配置字典
-    (define libra-options (make-hashtable string-hash string=?))
-
     ;; 展示字典
-    (define (show-options)
-        (vector-map (lambda (k) (display (string-append k ": " (hashtable-ref libra-options k ""))) (newline)) (hashtable-keys libra-options))
+    (define (hashtable-show ht)
+        (vector-map 
+            (lambda (k) (printf "~a : ~a\n" k (hashtable-ref ht k ""))) 
+            (hashtable-keys ht))
     )
-
-    ;; web根目录
-    (hashtable-set! libra-options "web-path" (get-app-path))
-    ;; 视图文件夹名称
-    (hashtable-set! libra-options "view-path" "views")
-    ;; 启动文件目录
-    (hashtable-set! libra-options "app-path" (get-app-path))
 
     ;; 获取web配置
     (define (get-option key . rest)
@@ -285,6 +275,18 @@
         )
     )
 
+    ;; 初始化操作
+    (define libra-init
+        (begin
+            ;; web根目录
+            (hashtable-set! libra-options "web-path" (get-app-path))
+            ;; 视图文件夹名称
+            (hashtable-set! libra-options "view-path" "views")
+            ;; 启动文件目录
+            (hashtable-set! libra-options "app-path" (get-app-path))
+            0
+        )    
+    )
 
     ;; 默认服务器处理 入口
     (define libra-proc
