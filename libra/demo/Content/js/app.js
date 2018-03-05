@@ -1,8 +1,9 @@
-$(function(){
+$(".btn").click(function(){
     $.ajax({
         url: "/blog/libra/17",
         success: function(data){
-            $('.name').html(data.name);
+            var str = JSON.stringify(data);
+            alert(str);
         }
     });
-})
+});

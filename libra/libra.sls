@@ -183,10 +183,7 @@
 
     ;; 判断资源文件
     (define (resource? request)
-        (if (not (string-index request #\.))
-            #f
-            (let ((type (string-downcase (substring request (+ 1 (string-index-right request #\.)) (string-length request)))))
-                (not (not (get-mime-type type))))))
+        (not (not (string-index request #\.))))
 
     ;; 返回资源对应http头
     (define (get-content-type type)
