@@ -179,7 +179,7 @@
     (define (default-make-json data)
         (http:content
             '(("Content-Type" . "application/json; charset=utf-8") ("Connection" . "close"))
-                (scm->json-string data)))
+                (json->string data)))
 
     ;; 判断资源文件
     (define (resource? request)
